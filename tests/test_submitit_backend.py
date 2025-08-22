@@ -122,7 +122,7 @@ def test_env_wrapper(mock_config):
         assert existing == "value"
         assert new == "added"
 
-    # Test replace mode
+    # Test replace mode - should preserve essential variables
     wrapper = backend._prepare_env_wrapper(
         env={"ONLY": "this"},
         env_merge="replace",
@@ -131,14 +131,16 @@ def test_env_wrapper(mock_config):
     def test_fn2():
         import os
 
-        return len(os.environ), os.environ.get("ONLY")
+        return os.environ.get("ONLY"), "PATH" in os.environ
 
     wrapped2 = wrapper(test_fn2)
-    with patch.dict("os.environ", {"EXISTING": "value", "OTHER": "stuff"}):
-        env_len, only = wrapped2()
+    with patch.dict("os.environ", {"PATH": "/usr/bin", "EXISTING": "value", "OTHER": "stuff"}):
+        only, has_path = wrapped2()
 
-        assert env_len == 1
+        # Should have our custom env var
         assert only == "this"
+        # Should preserve essential PATH variable
+        assert has_path is True
 
 
 @patch("subprocess.run")

@@ -2,43 +2,15 @@
 
 from __future__ import annotations
 
+import math
 import random
+import subprocess
 import time
-from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Union
 
 from paracore.config import get_config
 from paracore.submitit_backend import SubmititBackend
-
-
-@dataclass
-class SubmitHandle:
-    """Handle to a submitted job."""
-
-    job_id: str
-    job_name: str
-    array_index: Optional[int] = None
-    stdout_path: Optional[str] = None
-    stderr_path: Optional[str] = None
-    _backend_job: Any = None
-
-    def result(self, timeout: Optional[float] = None) -> Any:
-        """Wait for and return job result."""
-        if self._backend_job is None:
-            raise RuntimeError("No backend job associated with this handle")
-        return self._backend_job.result(timeout=timeout)
-
-    def done(self) -> bool:
-        """Check if job is done."""
-        if self._backend_job is None:
-            raise RuntimeError("No backend job associated with this handle")
-        return self._backend_job.done()
-
-    def cancel(self) -> None:
-        """Cancel the job."""
-        if self._backend_job is None:
-            raise RuntimeError("No backend job associated with this handle")
-        self._backend_job.cancel()
+from paracore.types import SubmitHandle
 
 
 def run_cmd(
@@ -85,7 +57,8 @@ def run_cmd(
                 qos=qos,
                 extra=extra,
             )
-        except Exception:
+        except (subprocess.SubprocessError, RuntimeError, OSError, ValueError):
+            # Only retry on known transient errors
             if attempt >= retries:
                 raise
             attempt += 1
@@ -139,7 +112,8 @@ def map_cmds(
                 qos=qos,
                 extra=extra,
             )
-        except Exception:
+        except (subprocess.SubprocessError, RuntimeError, OSError, ValueError):
+            # Only retry on known transient errors
             if attempt >= retries:
                 raise
             attempt += 1
@@ -195,7 +169,8 @@ def map_func(
                 qos=qos,
                 extra=extra,
             )
-        except Exception:
+        except (subprocess.SubprocessError, RuntimeError, OSError, ValueError):
+            # Only retry on known transient errors
             if attempt >= retries:
                 raise
             attempt += 1
@@ -223,8 +198,6 @@ def autotune_from_pilot(
     # Sample items
     items_list = list(sample_cmds_or_items)
     if len(items_list) > sample_size:
-        import random
-
         items_list = random.sample(items_list, sample_size)
 
     # Run pilot
@@ -259,6 +232,7 @@ def autotune_from_pilot(
     # Collect results
     durations = []
     max_rss_mb = 0
+    failed_jobs = 0
 
     for job in pilot_jobs:
         try:
@@ -267,24 +241,30 @@ def autotune_from_pilot(
                 metrics = result["_paracore_metrics"]
                 durations.append(metrics.get("duration_s", 0))
                 max_rss_mb = max(max_rss_mb, metrics.get("max_rss_mb", 0))
-        except Exception:
-            pass
+        except (subprocess.SubprocessError, RuntimeError, OSError):
+            # Track pilot job failure but continue with remaining results
+            failed_jobs += 1
+            # In production, consider logging: logger.warning(f"Pilot job {job.job_id} failed: {e}")
+            continue
 
     if not durations:
-        # Fallback to guesses if pilot failed
-        return {
+        # All pilot jobs failed - return guesses with warning flag
+        recommendations = {
             "time_min": time_min_guess,
             "mem_gb": mem_gb_guess,
             "cpus_per_task": cpus_per_task_guess,
             "array_parallelism": config.get_cluster_config()
             .get("slurm", {})
             .get("max_array_parallelism", 100),
+            "_warning": f"All {len(pilot_jobs)} pilot jobs failed. Using default guesses.",
         }
+        return recommendations
 
     # Compute recommendations
-    import math
-
-    p95_duration = sorted(durations)[int(len(durations) * 0.95)]
+    # Calculate p95 with bounds checking
+    sorted_durations = sorted(durations)
+    p95_index = min(int(len(sorted_durations) * 0.95), len(sorted_durations) - 1)
+    p95_duration = sorted_durations[p95_index] if sorted_durations else time_min_guess * 60
 
     recommendations = {
         "time_min": math.ceil(p95_duration * 1.3 / 60),
@@ -294,5 +274,10 @@ def autotune_from_pilot(
         .get("slurm", {})
         .get("max_array_parallelism", 100),
     }
+
+    if failed_jobs > 0:
+        recommendations["_info"] = (
+            f"Based on {len(durations)}/{len(pilot_jobs)} successful pilot jobs."
+        )
 
     return recommendations

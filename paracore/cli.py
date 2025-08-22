@@ -179,13 +179,13 @@ def main():
 Examples:
   # Submit a single job
   paracore run "python script.py" --time 60 --memory 16
-  
+
   # Submit batch jobs from file
   paracore batch commands.txt --array-parallelism 20
-  
+
   # Run pilot for autotuning
   paracore autotune commands.txt --sample-size 10
-  
+
   # Pipe commands
   cat commands.txt | paracore batch - --wait
 """,

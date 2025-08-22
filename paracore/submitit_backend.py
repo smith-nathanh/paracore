@@ -9,8 +9,8 @@ from typing import Any, Callable, List, Literal, Mapping, Optional
 
 import submitit
 
-from paracore.api import SubmitHandle
 from paracore.config import Config
+from paracore.types import SubmitHandle
 
 
 class SubmititBackend:
@@ -86,8 +86,34 @@ class SubmititBackend:
             def wrapped(*args, **kwargs):
                 # Handle environment
                 if env_merge == "replace" and env:
-                    # Replace entire environment
+                    # Preserve essential system and Slurm variables
+                    essential_vars = {
+                        "PATH",
+                        "HOME",
+                        "USER",
+                        "LOGNAME",
+                        "SHELL",
+                        "TERM",
+                        "LD_LIBRARY_PATH",
+                        "PYTHONPATH",
+                        "TMPDIR",
+                        "TEMP",
+                        "TMP",
+                        "LANG",
+                        "LC_ALL",
+                        "LC_CTYPE",
+                        "TZ",
+                        "HOSTNAME",
+                    }
+                    preserved = {}
+                    for key, value in os.environ.items():
+                        # Preserve essential vars and all Slurm-related variables
+                        if key in essential_vars or key.startswith("SLURM_"):
+                            preserved[key] = value
+
+                    # Clear and restore with preserved + user env
                     os.environ.clear()
+                    os.environ.update(preserved)
                     os.environ.update(env)
                 elif env_merge == "inherit" and env:
                     # Merge with current environment

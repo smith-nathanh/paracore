@@ -21,7 +21,7 @@ print(f"Logs will be at: {job.stdout_path}")
 # Wait for result
 try:
     result = job.result(timeout=3600)  # Wait up to 1 hour
-    print(f"Job completed successfully")
+    print("Job completed successfully")
     print(f"Output: {result}")
 except Exception as e:
     print(f"Job failed: {e}")

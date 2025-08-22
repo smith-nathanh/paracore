@@ -5,8 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import time
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Mapping, Optional
+from typing import Any, Callable, List, Literal, Mapping, Optional
 
 import submitit
 
@@ -16,10 +15,10 @@ from paracore.config import Config
 
 class SubmititBackend:
     """Thin wrapper around Submitit for job submission."""
-    
+
     def __init__(self, config: Config):
         self.config = config
-    
+
     def _setup_executor(
         self,
         job_name: str,
@@ -44,10 +43,10 @@ class SubmititBackend:
             array_parallelism=array_parallelism,
             extra=extra,
         )
-        
+
         # Create executor
         executor = submitit.AutoExecutor(folder="submitit_logs")
-        
+
         # Update parameters
         slurm_params = {
             "job_name": job_name,
@@ -56,25 +55,25 @@ class SubmititBackend:
             "cpus_per_task": resolved["cpus_per_task"],
             "mem_gb": resolved["mem_gb"],
         }
-        
+
         if resolved.get("account"):
             slurm_params["account"] = resolved["account"]
-        
+
         if resolved.get("qos"):
             slurm_params["qos"] = resolved["qos"]
-        
+
         # Handle array parallelism
         if array_parallelism is not None:
             slurm_params["array_parallelism"] = array_parallelism
-        
+
         # Add extra parameters
         if extra:
             slurm_params["slurm_additional_parameters"] = extra
-        
+
         executor.update_parameters(**slurm_params)
-        
+
         return executor
-    
+
     def _prepare_env_wrapper(
         self,
         env_setup: Optional[str] = None,
@@ -82,6 +81,7 @@ class SubmititBackend:
         env_merge: Literal["inherit", "replace"] = "inherit",
     ) -> Callable:
         """Create a wrapper that sets up the environment before running the task."""
+
         def env_wrapper(task_fn: Callable) -> Callable:
             def wrapped(*args, **kwargs):
                 # Handle environment
@@ -92,7 +92,7 @@ class SubmititBackend:
                 elif env_merge == "inherit" and env:
                     # Merge with current environment
                     os.environ.update(env)
-                
+
                 # Run env_setup command if provided
                 if env_setup:
                     setup_result = subprocess.run(
@@ -103,14 +103,14 @@ class SubmititBackend:
                     )
                     if setup_result.returncode != 0:
                         raise RuntimeError(f"env_setup failed: {setup_result.stderr}")
-                
+
                 # Run the actual task
                 return task_fn(*args, **kwargs)
-            
+
             return wrapped
-        
+
         return env_wrapper
-    
+
     def submit_cmd(
         self,
         cmd: str,
@@ -134,7 +134,7 @@ class SubmititBackend:
                 partition=partition,
                 env=env_setup,
             )
-        
+
         # Setup executor
         executor = self._setup_executor(
             job_name=job_name,
@@ -146,10 +146,10 @@ class SubmititBackend:
             qos=qos,
             extra=extra,
         )
-        
+
         # Create command runner
         env_wrapper = self._prepare_env_wrapper(env_setup, env, env_merge)
-        
+
         def run_command():
             result = subprocess.run(
                 cmd,
@@ -160,12 +160,12 @@ class SubmititBackend:
             if result.returncode != 0:
                 raise RuntimeError(f"Command failed: {result.stderr}")
             return result.stdout
-        
+
         wrapped_fn = env_wrapper(run_command)
-        
+
         # Submit job
         job = executor.submit(wrapped_fn)
-        
+
         return SubmitHandle(
             job_id=job.job_id,
             job_name=job_name,
@@ -173,7 +173,7 @@ class SubmititBackend:
             stderr_path=str(job.paths.stderr),
             _backend_job=job,
         )
-    
+
     def submit_cmd_array(
         self,
         cmds: List[str],
@@ -199,7 +199,7 @@ class SubmititBackend:
                 partition=partition,
                 env=env_setup,
             )
-        
+
         # Setup executor
         executor = self._setup_executor(
             job_name=job_name,
@@ -212,14 +212,14 @@ class SubmititBackend:
             array_parallelism=array_parallelism,
             extra=extra,
         )
-        
+
         # Create command runners
         env_wrapper = self._prepare_env_wrapper(env_setup, env, env_merge)
-        
+
         def make_runner(cmd: str):
             def run_command():
                 start_time = time.time()
-                
+
                 if measure_resources:
                     # Use /usr/bin/time to measure resources
                     wrapped_cmd = f"/usr/bin/time -v {cmd}"
@@ -229,22 +229,22 @@ class SubmititBackend:
                         capture_output=True,
                         text=True,
                     )
-                    
+
                     # Parse time output
                     max_rss_mb = 0
-                    for line in result.stderr.split('\n'):
+                    for line in result.stderr.split("\n"):
                         if "Maximum resident set size" in line:
                             try:
                                 max_rss_kb = int(line.split()[-1])
                                 max_rss_mb = max_rss_kb / 1024
                             except (ValueError, IndexError):
                                 pass
-                    
+
                     duration_s = time.time() - start_time
-                    
+
                     if result.returncode != 0:
                         raise RuntimeError(f"Command failed: {result.stderr}")
-                    
+
                     return {
                         "_paracore_metrics": {
                             "duration_s": duration_s,
@@ -262,27 +262,29 @@ class SubmititBackend:
                     if result.returncode != 0:
                         raise RuntimeError(f"Command failed: {result.stderr}")
                     return result.stdout
-            
+
             return env_wrapper(run_command)
-        
+
         # Submit array job
         runners = [make_runner(cmd) for cmd in cmds]
         jobs = executor.map_array(lambda i: runners[i](), range(len(cmds)))
-        
+
         # Create handles
         handles = []
         for i, job in enumerate(jobs):
-            handles.append(SubmitHandle(
-                job_id=job.job_id,
-                job_name=job_name,
-                array_index=i,
-                stdout_path=str(job.paths.stdout),
-                stderr_path=str(job.paths.stderr),
-                _backend_job=job,
-            ))
-        
+            handles.append(
+                SubmitHandle(
+                    job_id=job.job_id,
+                    job_name=job_name,
+                    array_index=i,
+                    stdout_path=str(job.paths.stdout),
+                    stderr_path=str(job.paths.stderr),
+                    _backend_job=job,
+                )
+            )
+
         return handles
-    
+
     def submit_func_array(
         self,
         fn: Callable[[Any], Any],
@@ -309,7 +311,7 @@ class SubmititBackend:
                 partition=partition,
                 env=env_setup,
             )
-        
+
         # Setup executor
         executor = self._setup_executor(
             job_name=job_name,
@@ -322,20 +324,22 @@ class SubmititBackend:
             array_parallelism=array_parallelism,
             extra=extra,
         )
-        
+
         # Create wrapped function
         env_wrapper = self._prepare_env_wrapper(env_setup, env, env_merge)
-        
+
         if measure_resources:
+
             def wrapped_fn(item):
                 start_time = time.time()
                 result = fn(item)
                 duration_s = time.time() - start_time
-                
+
                 # Try to get memory usage (simplified for Python functions)
                 import resource
+
                 max_rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
-                
+
                 return {
                     "_paracore_metrics": {
                         "duration_s": duration_s,
@@ -345,22 +349,24 @@ class SubmititBackend:
                 }
         else:
             wrapped_fn = fn
-        
+
         final_fn = env_wrapper(wrapped_fn)
-        
+
         # Submit array job
         jobs = executor.map_array(final_fn, items)
-        
+
         # Create handles
         handles = []
         for i, job in enumerate(jobs):
-            handles.append(SubmitHandle(
-                job_id=job.job_id,
-                job_name=job_name,
-                array_index=i,
-                stdout_path=str(job.paths.stdout),
-                stderr_path=str(job.paths.stderr),
-                _backend_job=job,
-            ))
-        
+            handles.append(
+                SubmitHandle(
+                    job_id=job.job_id,
+                    job_name=job_name,
+                    array_index=i,
+                    stdout_path=str(job.paths.stdout),
+                    stderr_path=str(job.paths.stderr),
+                    _backend_job=job,
+                )
+            )
+
         return handles

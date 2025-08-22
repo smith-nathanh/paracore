@@ -1,6 +1,6 @@
 """Dask helpers for paracore (placeholder for v1.1)."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 def start_dask_slurm(**kwargs) -> Dict[str, Any]:

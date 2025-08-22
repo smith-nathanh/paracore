@@ -22,7 +22,7 @@ suggestions = autotune_from_pilot(
     time_min_guess=30,
 )
 
-print(f"Pilot recommendations:")
+print("Pilot recommendations:")
 print(f"  Time: {suggestions['time_min']} minutes")
 print(f"  Memory: {suggestions['mem_gb']} GB")
 print(f"  CPUs: {suggestions['cpus_per_task']}")

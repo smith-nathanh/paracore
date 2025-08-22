@@ -1,10 +1,11 @@
 """Tests for public API."""
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 import time
+from unittest.mock import Mock, patch
 
-from paracore import run_cmd, map_cmds, map_func, autotune_from_pilot, SubmitHandle
+import pytest
+
+from paracore import SubmitHandle, autotune_from_pilot, map_cmds, map_func, run_cmd
 
 
 @patch("paracore.api.SubmititBackend")
@@ -13,7 +14,7 @@ def test_run_cmd(mock_backend_class):
     # Setup mock
     mock_backend = Mock()
     mock_backend_class.return_value = mock_backend
-    
+
     mock_handle = SubmitHandle(
         job_id="12345",
         job_name="test-job",
@@ -21,7 +22,7 @@ def test_run_cmd(mock_backend_class):
         stderr_path="/logs/stderr",
     )
     mock_backend.submit_cmd.return_value = mock_handle
-    
+
     # Call function
     result = run_cmd(
         "echo hello",
@@ -31,11 +32,11 @@ def test_run_cmd(mock_backend_class):
         cpus_per_task=2,
         mem_gb=8,
     )
-    
+
     # Verify
     assert result.job_id == "12345"
     assert result.job_name == "test-job"
-    
+
     mock_backend.submit_cmd.assert_called_once()
     call_kwargs = mock_backend.submit_cmd.call_args.kwargs
     assert call_kwargs["cmd"] == "echo hello"
@@ -49,13 +50,12 @@ def test_map_cmds(mock_backend_class):
     # Setup mock
     mock_backend = Mock()
     mock_backend_class.return_value = mock_backend
-    
+
     mock_handles = [
-        SubmitHandle(job_id=f"1234{i}", job_name="array-job", array_index=i)
-        for i in range(3)
+        SubmitHandle(job_id=f"1234{i}", job_name="array-job", array_index=i) for i in range(3)
     ]
     mock_backend.submit_cmd_array.return_value = mock_handles
-    
+
     # Call function
     cmds = ["echo 1", "echo 2", "echo 3"]
     results = map_cmds(
@@ -64,12 +64,12 @@ def test_map_cmds(mock_backend_class):
         partition="compute",
         array_parallelism=10,
     )
-    
+
     # Verify
     assert len(results) == 3
     assert results[0].job_id == "12340"
     assert results[1].array_index == 1
-    
+
     mock_backend.submit_cmd_array.assert_called_once()
     call_kwargs = mock_backend.submit_cmd_array.call_args.kwargs
     assert call_kwargs["cmds"] == cmds
@@ -82,17 +82,16 @@ def test_map_func(mock_backend_class):
     # Setup mock
     mock_backend = Mock()
     mock_backend_class.return_value = mock_backend
-    
+
     mock_handles = [
-        SubmitHandle(job_id=f"2345{i}", job_name="func-job", array_index=i)
-        for i in range(5)
+        SubmitHandle(job_id=f"2345{i}", job_name="func-job", array_index=i) for i in range(5)
     ]
     mock_backend.submit_func_array.return_value = mock_handles
-    
+
     # Define test function
     def process_item(x):
         return x * 2
-    
+
     # Call function
     items = [1, 2, 3, 4, 5]
     results = map_func(
@@ -101,11 +100,11 @@ def test_map_func(mock_backend_class):
         job_name="func-job",
         partition="compute",
     )
-    
+
     # Verify
     assert len(results) == 5
     assert all(h.job_name == "func-job" for h in results)
-    
+
     mock_backend.submit_func_array.assert_called_once()
     call_kwargs = mock_backend.submit_func_array.call_args.kwargs
     assert call_kwargs["fn"] == process_item
@@ -118,14 +117,14 @@ def test_retry_logic(mock_backend_class):
     # Setup mock
     mock_backend = Mock()
     mock_backend_class.return_value = mock_backend
-    
+
     # First two calls fail, third succeeds
     mock_backend.submit_cmd.side_effect = [
         Exception("Network error"),
         Exception("Timeout"),
         SubmitHandle(job_id="99999", job_name="retry-job"),
     ]
-    
+
     # Call with retries
     start_time = time.time()
     result = run_cmd(
@@ -134,7 +133,7 @@ def test_retry_logic(mock_backend_class):
         retry_backoff_s=0.1,  # Short backoff for testing
     )
     elapsed = time.time() - start_time
-    
+
     # Verify
     assert result.job_id == "99999"
     assert mock_backend.submit_cmd.call_count == 3
@@ -147,7 +146,7 @@ def test_autotune_from_pilot(mock_backend_class):
     # Setup mock
     mock_backend = Mock()
     mock_backend_class.return_value = mock_backend
-    
+
     # Mock pilot job results
     mock_jobs = []
     for i in range(5):
@@ -159,9 +158,9 @@ def test_autotune_from_pilot(mock_backend_class):
             }
         }
         mock_jobs.append(job)
-    
+
     mock_backend.submit_cmd_array.return_value = mock_jobs
-    
+
     # Call function
     sample_cmds = [f"cmd {i}" for i in range(10)]
     suggestions = autotune_from_pilot(
@@ -171,7 +170,7 @@ def test_autotune_from_pilot(mock_backend_class):
         measurement="time_and_rss",
         partition="compute",
     )
-    
+
     # Verify recommendations
     # p95 of [45, 50, 55, 60, 65] = 65, * 1.3 / 60 = ~1.4 = 2 min
     assert suggestions["time_min"] >= 1
@@ -186,21 +185,21 @@ def test_submit_handle_methods():
     mock_job = Mock()
     mock_job.result.return_value = "test result"
     mock_job.done.return_value = True
-    
+
     handle = SubmitHandle(
         job_id="123",
         job_name="test",
         _backend_job=mock_job,
     )
-    
+
     # Test result
     assert handle.result() == "test result"
     mock_job.result.assert_called_once_with(timeout=None)
-    
+
     # Test done
     assert handle.done() is True
     mock_job.done.assert_called_once()
-    
+
     # Test cancel
     handle.cancel()
     mock_job.cancel.assert_called_once()
@@ -209,12 +208,12 @@ def test_submit_handle_methods():
 def test_submit_handle_no_backend():
     """Test SubmitHandle without backend job raises errors."""
     handle = SubmitHandle(job_id="123", job_name="test")
-    
+
     with pytest.raises(RuntimeError, match="No backend job"):
         handle.result()
-    
+
     with pytest.raises(RuntimeError, match="No backend job"):
         handle.done()
-    
+
     with pytest.raises(RuntimeError, match="No backend job"):
         handle.cancel()

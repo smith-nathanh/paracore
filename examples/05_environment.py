@@ -1,6 +1,6 @@
 """Example: Different environment handling strategies."""
 
-from paracore import run_cmd, map_cmds
+from paracore import map_cmds, run_cmd
 
 # Example 1: Inherit parent environment (default)
 job1 = run_cmd(
@@ -41,7 +41,9 @@ job4 = run_cmd(
 )
 
 # Example 5: Array job with consistent environment
-cmds = [f"python examples/process_data.py inputs/config_{i:04d}.json --mode quick" for i in range(10)]
+cmds = [
+    f"python examples/process_data.py inputs/config_{i:04d}.json --mode quick" for i in range(10)
+]
 jobs = map_cmds(
     cmds,
     env={"PROCESSING_MODE": "parallel", "LOG_LEVEL": "warning"},
@@ -50,7 +52,7 @@ jobs = map_cmds(
     job_name="env-array",
 )
 
-print(f"Submitted environment test jobs:")
+print("Submitted environment test jobs:")
 print(f"  Inherit: {job1.job_id}")
 print(f"  Overlay: {job2.job_id}")
 print(f"  Replace: {job3.job_id}")

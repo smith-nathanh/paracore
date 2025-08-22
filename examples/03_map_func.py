@@ -1,21 +1,22 @@
 """Example: Map a Python function over items."""
 
-from paracore import map_func
 import json
 import time
+
+from paracore import map_func
 
 
 def process_config_file(cfg_path: str) -> dict:
     """Load config and process data."""
     with open(cfg_path) as f:
         cfg = json.load(f)
-    
+
     # Simulate some processing
     time.sleep(0.1)
-    
+
     # Transform the data
     result_value = cfg.get("value", 0) * 2.5
-    
+
     return {
         "id": cfg["id"],
         "result": result_value,

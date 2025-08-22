@@ -2,38 +2,38 @@
 
 from __future__ import annotations
 
-import time
 import random
-from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Union
+import time
 from dataclasses import dataclass
+from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Union
 
-from paracore.submitit_backend import SubmititBackend
 from paracore.config import get_config
+from paracore.submitit_backend import SubmititBackend
 
 
 @dataclass
 class SubmitHandle:
     """Handle to a submitted job."""
-    
+
     job_id: str
     job_name: str
     array_index: Optional[int] = None
     stdout_path: Optional[str] = None
     stderr_path: Optional[str] = None
     _backend_job: Any = None
-    
+
     def result(self, timeout: Optional[float] = None) -> Any:
         """Wait for and return job result."""
         if self._backend_job is None:
             raise RuntimeError("No backend job associated with this handle")
         return self._backend_job.result(timeout=timeout)
-    
+
     def done(self) -> bool:
         """Check if job is done."""
         if self._backend_job is None:
             raise RuntimeError("No backend job associated with this handle")
         return self._backend_job.done()
-    
+
     def cancel(self) -> None:
         """Cancel the job."""
         if self._backend_job is None:
@@ -62,11 +62,11 @@ def run_cmd(
     """Submit a single command to the cluster."""
     config = get_config()
     backend = SubmititBackend(config)
-    
+
     # Apply jitter if requested
     if jitter_s > 0:
         time.sleep(random.uniform(0, jitter_s))
-    
+
     # Submit with retries
     attempt = 0
     while True:
@@ -85,7 +85,7 @@ def run_cmd(
                 qos=qos,
                 extra=extra,
             )
-        except Exception as e:
+        except Exception:
             if attempt >= retries:
                 raise
             attempt += 1
@@ -115,11 +115,11 @@ def map_cmds(
     """Submit an array of commands to the cluster."""
     config = get_config()
     backend = SubmititBackend(config)
-    
+
     # Apply jitter if requested
     if jitter_s > 0:
         time.sleep(random.uniform(0, jitter_s))
-    
+
     # Submit with retries
     attempt = 0
     while True:
@@ -139,7 +139,7 @@ def map_cmds(
                 qos=qos,
                 extra=extra,
             )
-        except Exception as e:
+        except Exception:
             if attempt >= retries:
                 raise
             attempt += 1
@@ -170,11 +170,11 @@ def map_func(
     """Submit a function mapped over items to the cluster."""
     config = get_config()
     backend = SubmititBackend(config)
-    
+
     # Apply jitter if requested
     if jitter_s > 0:
         time.sleep(random.uniform(0, jitter_s))
-    
+
     # Submit with retries
     attempt = 0
     while True:
@@ -195,7 +195,7 @@ def map_func(
                 qos=qos,
                 extra=extra,
             )
-        except Exception as e:
+        except Exception:
             if attempt >= retries:
                 raise
             attempt += 1
@@ -219,13 +219,14 @@ def autotune_from_pilot(
     """Run a pilot sample and suggest resource parameters."""
     config = get_config()
     backend = SubmititBackend(config)
-    
+
     # Sample items
     items_list = list(sample_cmds_or_items)
     if len(items_list) > sample_size:
         import random
+
         items_list = random.sample(items_list, sample_size)
-    
+
     # Run pilot
     if runner == "cmds":
         pilot_jobs = backend.submit_cmd_array(
@@ -254,11 +255,11 @@ def autotune_from_pilot(
             array_parallelism=None,
             measure_resources=measurement == "time_and_rss",
         )
-    
+
     # Collect results
     durations = []
     max_rss_mb = 0
-    
+
     for job in pilot_jobs:
         try:
             result = job.result()
@@ -268,25 +269,30 @@ def autotune_from_pilot(
                 max_rss_mb = max(max_rss_mb, metrics.get("max_rss_mb", 0))
         except Exception:
             pass
-    
+
     if not durations:
         # Fallback to guesses if pilot failed
         return {
             "time_min": time_min_guess,
             "mem_gb": mem_gb_guess,
             "cpus_per_task": cpus_per_task_guess,
-            "array_parallelism": config.get_cluster_config().get("slurm", {}).get("max_array_parallelism", 100),
+            "array_parallelism": config.get_cluster_config()
+            .get("slurm", {})
+            .get("max_array_parallelism", 100),
         }
-    
+
     # Compute recommendations
     import math
+
     p95_duration = sorted(durations)[int(len(durations) * 0.95)]
-    
+
     recommendations = {
         "time_min": math.ceil(p95_duration * 1.3 / 60),
         "mem_gb": math.ceil(max_rss_mb * 1.3 / 1024) if max_rss_mb > 0 else mem_gb_guess,
         "cpus_per_task": cpus_per_task_guess,
-        "array_parallelism": config.get_cluster_config().get("slurm", {}).get("max_array_parallelism", 100),
+        "array_parallelism": config.get_cluster_config()
+        .get("slurm", {})
+        .get("max_array_parallelism", 100),
     }
-    
+
     return recommendations

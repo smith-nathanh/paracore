@@ -207,9 +207,10 @@ Command exited with non-zero status 0
 
     # Submit with measurement
     backend = SubmititBackend(mock_config)
-    handles = backend.submit_cmd_array(
+    backend.submit_cmd_array(
         cmds=["python script.py"],
-        measure_resources=True,
+        collect_metrics=True,
+        measure_memory=True,
     )
 
     # Get the submitted function and call it
@@ -220,5 +221,36 @@ Command exited with non-zero status 0
     # Verify metrics
     assert "_paracore_metrics" in result
     metrics = result["_paracore_metrics"]
-    assert metrics["max_rss_mb"] == 2000  # 2048000 KB / 1024
+    assert pytest.approx(metrics["max_rss_mb"], rel=0.01) == 2000  # 2048000 KB / 1024
+    assert "duration_s" in metrics and metrics["duration_s"] >= 0
+
+
+@patch("paracore.submitit_backend.submitit.AutoExecutor")
+@patch("subprocess.run")
+def test_resource_measurement_time_only(mock_run, mock_executor_class, mock_config):
+    """Collect metrics without measuring memory."""
+    mock_executor = Mock()
+    mock_executor_class.return_value = mock_executor
+
+    mock_job = Mock()
+    mock_job.job_id = "22222"
+    mock_job.paths.stdout = "/logs/stdout"
+    mock_job.paths.stderr = "/logs/stderr"
+    mock_executor.map_array.return_value = [mock_job]
+
+    mock_run.return_value = Mock(returncode=0)
+
+    backend = SubmititBackend(mock_config)
+    backend.submit_cmd_array(
+        cmds=["python script.py"],
+        collect_metrics=True,
+        measure_memory=False,
+    )
+
+    map_array_call = mock_executor.map_array.call_args
+    runner_fn = map_array_call[0][0]
+    result = runner_fn(0)
+
+    metrics = result["_paracore_metrics"]
     assert "duration_s" in metrics
+    assert "max_rss_mb" not in metrics

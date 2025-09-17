@@ -217,7 +217,8 @@ def autotune_from_pilot(
             mem_gb=mem_gb_guess,
             env_setup=env_setup,
             array_parallelism=None,
-            measure_resources=measurement == "time_and_rss",
+            collect_metrics=True,
+            measure_memory=measurement == "time_and_rss",
         )
     else:
         if fn is None:
@@ -232,7 +233,8 @@ def autotune_from_pilot(
             mem_gb=mem_gb_guess,
             env_setup=env_setup,
             array_parallelism=None,
-            measure_resources=measurement == "time_and_rss",
+            collect_metrics=True,
+            measure_memory=measurement == "time_and_rss",
         )
 
     # Collect results

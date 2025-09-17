@@ -218,7 +218,8 @@ class SubmititBackend:
         account: Optional[str] = None,
         qos: Optional[str] = None,
         extra: Optional[Mapping[str, Any]] = None,
-        measure_resources: bool = False,
+        collect_metrics: bool = False,
+        measure_memory: bool = False,
     ) -> List[SubmitHandle]:
         """Submit an array of commands."""
         # Format job name
@@ -249,7 +250,7 @@ class SubmititBackend:
             def run_command():
                 start_time = time.time()
 
-                if measure_resources:
+                if collect_metrics and measure_memory:
                     # Use /usr/bin/time to measure resources
                     wrapped_cmd = f"/usr/bin/time -v {cmd}"
                     with tempfile.NamedTemporaryFile(delete=False) as stderr_file:
@@ -305,6 +306,14 @@ class SubmititBackend:
                         "Check Slurm stdout/stderr logs for details."
                     ) from exc
 
+                if collect_metrics:
+                    duration_s = time.time() - start_time
+                    return {
+                        "_paracore_metrics": {
+                            "duration_s": duration_s,
+                        }
+                    }
+
             return env_wrapper(run_command)
 
         # Submit array job
@@ -343,7 +352,8 @@ class SubmititBackend:
         account: Optional[str] = None,
         qos: Optional[str] = None,
         extra: Optional[Mapping[str, Any]] = None,
-        measure_resources: bool = False,
+        collect_metrics: bool = False,
+        measure_memory: bool = False,
     ) -> List[SubmitHandle]:
         """Submit a function mapped over items."""
         # Format job name
@@ -370,23 +380,23 @@ class SubmititBackend:
         # Create wrapped function
         env_wrapper = self._prepare_env_wrapper(env_setup, env, env_merge)
 
-        if measure_resources:
+        if collect_metrics:
 
             def wrapped_fn(item):
                 start_time = time.time()
                 result = fn(item)
                 duration_s = time.time() - start_time
 
-                # Try to get memory usage (simplified for Python functions)
-                import resource
+                metrics = {"duration_s": duration_s}
 
-                max_rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+                if measure_memory:
+                    # Try to get memory usage (simplified for Python functions)
+                    import resource
+
+                    metrics["max_rss_mb"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
                 return {
-                    "_paracore_metrics": {
-                        "duration_s": duration_s,
-                        "max_rss_mb": max_rss_mb,
-                    },
+                    "_paracore_metrics": metrics,
                     "result": result,
                 }
         else:

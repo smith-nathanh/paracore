@@ -180,6 +180,35 @@ def test_autotune_from_pilot(mock_backend_class):
     assert "array_parallelism" in suggestions
 
 
+@patch("paracore.api.SubmititBackend")
+def test_autotune_time_only_collects_duration(mock_backend_class):
+    """Time-only measurement should still produce duration-informed suggestions."""
+    mock_backend = Mock()
+    mock_backend_class.return_value = mock_backend
+
+    job = Mock()
+    job.result.return_value = {
+        "_paracore_metrics": {
+            "duration_s": 120,
+        }
+    }
+    mock_backend.submit_cmd_array.return_value = [job]
+
+    suggestions = autotune_from_pilot(
+        ["cmd"],
+        runner="cmds",
+        sample_size=1,
+        measurement="time_only",
+        time_min_guess=1,
+        mem_gb_guess=2,
+    )
+
+    # Duration is 120s -> p95 ~120, *1.3/60 ≈ 2.6 -> rounds to 3
+    assert suggestions["time_min"] >= 2
+    # Without RSS data, memory should stay at guess
+    assert suggestions["mem_gb"] == 2
+
+
 def test_submit_handle_methods():
     """Test SubmitHandle methods."""
     mock_job = Mock()

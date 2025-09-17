@@ -1,10 +1,10 @@
-python examples/process_data.py inputs/config_0000.json results/output_0000.json
-python examples/process_data.py inputs/config_0001.json results/output_0001.json
-python examples/process_data.py inputs/config_0002.json results/output_0002.json
-python examples/process_data.py inputs/config_0003.json results/output_0003.json
-python examples/process_data.py inputs/config_0004.json results/output_0004.json
-python examples/process_data.py inputs/config_0005.json results/output_0005.json --mode quick
-python examples/process_data.py inputs/config_0006.json results/output_0006.json --mode quick
-python examples/process_data.py inputs/config_0007.json results/output_0007.json --mode heavy
-python examples/process_data.py inputs/config_0008.json results/output_0008.json
-python examples/process_data.py inputs/config_0009.json results/output_0009.json
+python examples/process_data.py examples/inputs/config_0000.json examples/results/cli_output_0000.json --mode simple
+python examples/process_data.py examples/inputs/config_0001.json examples/results/cli_output_0001.json --mode simple
+python examples/process_data.py examples/inputs/config_0002.json examples/results/cli_output_0002.json --mode simple
+python examples/process_data.py examples/inputs/config_0003.json examples/results/cli_output_0003.json --mode quick
+python examples/process_data.py examples/inputs/config_0004.json examples/results/cli_output_0004.json --mode heavy
+python examples/process_data.py examples/inputs/config_0005.json examples/results/cli_output_0005.json --mode simple
+python examples/process_data.py examples/inputs/config_0006.json examples/results/cli_output_0006.json --mode simple
+python examples/process_data.py examples/inputs/config_0007.json examples/results/cli_output_0007.json --mode heavy
+python examples/process_data.py examples/inputs/config_0008.json examples/results/cli_output_0008.json --mode quick
+python examples/process_data.py examples/inputs/config_0009.json examples/results/cli_output_0009.json --mode simple

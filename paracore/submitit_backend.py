@@ -45,6 +45,18 @@ class SubmititBackend:
             extra=extra,
         )
 
+        effective_parallelism = array_parallelism
+        if effective_parallelism is None:
+            effective_parallelism = resolved.get("array_parallelism")
+
+        max_parallelism = resolved.get("max_array_parallelism")
+        if max_parallelism is not None and effective_parallelism is not None:
+            if effective_parallelism > max_parallelism:
+                raise ValueError(
+                    "array_parallelism exceeds configured max"
+                    f" ({effective_parallelism} > {max_parallelism})"
+                )
+
         # Create executor
         executor = submitit.AutoExecutor(folder="submitit_logs")
 
@@ -64,8 +76,8 @@ class SubmititBackend:
             slurm_params["qos"] = resolved["qos"]
 
         # Handle array parallelism
-        if array_parallelism is not None:
-            slurm_params["array_parallelism"] = array_parallelism
+        if effective_parallelism is not None:
+            slurm_params["array_parallelism"] = effective_parallelism
 
         # Add extra parameters
         if extra:

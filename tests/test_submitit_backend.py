@@ -100,6 +100,20 @@ def test_submit_cmd_array(mock_executor_class, mock_config):
     assert params.get("array_parallelism") == 10
 
 
+@patch("paracore.submitit_backend.submitit.AutoExecutor")
+def test_submit_cmd_array_respects_max_parallelism(mock_executor_class, mock_config):
+    """Requesting array parallelism above configured max should fail."""
+    mock_executor_class.return_value = Mock()
+
+    backend = SubmititBackend(mock_config)
+
+    with pytest.raises(ValueError, match="array_parallelism exceeds configured max"):
+        backend.submit_cmd_array(
+            cmds=["echo 1", "echo 2"],
+            array_parallelism=500,
+        )
+
+
 def test_env_wrapper(mock_config):
     """Test environment wrapper functionality."""
     backend = SubmititBackend(mock_config)

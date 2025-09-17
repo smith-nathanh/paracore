@@ -112,12 +112,13 @@ class Config:
             "cpus_per_task": overrides.get("cpus_per_task", slurm_config.get("cpus_per_task")),
             "mem_gb": overrides.get("mem_gb", slurm_config.get("mem_gb")),
             "time_min": overrides.get("time_min", slurm_config.get("time_min")),
-            "max_array_parallelism": overrides.get(
-                "array_parallelism", slurm_config.get("max_array_parallelism")
-            ),
+            "max_array_parallelism": slurm_config.get("max_array_parallelism"),
             "start_jitter_s": overrides.get("jitter_s", slurm_config.get("start_jitter_s", 0)),
             "extra": {**slurm_config.get("extra", {}), **overrides.get("extra", {})},
         }
+
+        if "array_parallelism" in overrides and overrides["array_parallelism"] is not None:
+            resolved["array_parallelism"] = overrides["array_parallelism"]
 
         # Add any additional overrides not in standard fields
         for key, value in overrides.items():

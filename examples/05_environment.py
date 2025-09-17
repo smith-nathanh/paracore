@@ -1,60 +1,81 @@
-"""Example: Different environment handling strategies."""
+"""Example: Demonstrate environment handling strategies."""
+
+from __future__ import annotations
+
+from pathlib import Path
 
 from paracore import map_cmds, run_cmd
 
-# Example 1: Inherit parent environment (default)
-job1 = run_cmd(
-    "echo $PATH && python check_env.py",
-    job_name="env-inherit",
-    partition="short",
-)
+EXAMPLES_ROOT = Path(__file__).resolve().parent
+CONFIG = (EXAMPLES_ROOT / "inputs" / "config_0000.json").as_posix()
 
-# Example 2: Add environment variables to inherited env
-job2 = run_cmd(
-    "echo $APP_MODE && echo $DEBUG_LEVEL",
-    env={"APP_MODE": "production", "DEBUG_LEVEL": "info"},
-    env_merge="inherit",  # This is the default
-    job_name="env-overlay",
-    partition="short",
-)
 
-# Example 3: Replace entire environment
-job3 = run_cmd(
-    "env | sort",  # Show all environment variables
-    env={
-        "PATH": "/usr/bin:/bin",
-        "HOME": "/home/user",
-        "APP_MODE": "minimal",
-    },
-    env_merge="replace",
-    job_name="env-replace",
-    partition="short",
-)
+def main() -> None:
+    if not (EXAMPLES_ROOT / "inputs").exists():
+        raise SystemExit(
+            "Config directory missing. Run `python examples/generate_test_data.py` first."
+        )
 
-# Example 4: Use env_setup command
-job4 = run_cmd(
-    "python examples/process_data.py inputs/config_0000.json",
-    env_setup="source /opt/envs/prod/bin/activate",
-    env={"ANALYSIS_TYPE": "full"},
-    job_name="env-setup",
-    partition="compute",
-)
+    job1 = run_cmd(
+        "python examples/check_env.py --keys PATH APP_MODE",
+        job_name="env-inherit",
+        partition="compute",
+    )
 
-# Example 5: Array job with consistent environment
-cmds = [
-    f"python examples/process_data.py inputs/config_{i:04d}.json --mode quick" for i in range(10)
-]
-jobs = map_cmds(
-    cmds,
-    env={"PROCESSING_MODE": "parallel", "LOG_LEVEL": "warning"},
-    partition="compute",
-    array_parallelism=5,
-    job_name="env-array",
-)
+    job2 = run_cmd(
+        "python examples/check_env.py --keys PATH APP_MODE LOG_LEVEL",
+        env={"APP_MODE": "production", "LOG_LEVEL": "info"},
+        env_merge="inherit",
+        job_name="env-overlay",
+        partition="compute",
+    )
 
-print("Submitted environment test jobs:")
-print(f"  Inherit: {job1.job_id}")
-print(f"  Overlay: {job2.job_id}")
-print(f"  Replace: {job3.job_id}")
-print(f"  Setup: {job4.job_id}")
-print(f"  Array: {len(jobs)} jobs")
+    job3 = run_cmd(
+        "python examples/check_env.py --keys PATH APP_MODE",
+        env={
+            "PATH": "/opt/tools:/usr/bin",
+            "APP_MODE": "minimal",
+        },
+        env_merge="replace",
+        job_name="env-replace",
+        partition="compute",
+    )
+
+    job4 = run_cmd(
+        f"python examples/process_data.py {CONFIG} --mode quick",
+        env_setup="source /opt/envs/prod/bin/activate",
+        env={"ANALYSIS_TYPE": "full"},
+        job_name="env-setup",
+        partition="compute",
+    )
+
+    cmds = [
+        " ".join(
+            [
+                "python",
+                "examples/process_data.py",
+                (EXAMPLES_ROOT / "inputs" / f"config_{i:04d}.json").as_posix(),
+                "--mode",
+                "simple",
+            ]
+        )
+        for i in range(5)
+    ]
+    jobs = map_cmds(
+        cmds,
+        env={"PROCESSING_MODE": "parallel", "LOG_LEVEL": "warning"},
+        partition="compute",
+        array_parallelism=3,
+        job_name="env-array",
+    )
+
+    print("Submitted environment test jobs:")
+    print(f"  Inherit: {job1.job_id}")
+    print(f"  Overlay: {job2.job_id}")
+    print(f"  Replace: {job3.job_id}")
+    print(f"  Setup: {job4.job_id}")
+    print(f"  Array: {len(jobs)} jobs")
+
+
+if __name__ == "__main__":
+    main()

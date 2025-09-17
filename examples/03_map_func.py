@@ -1,56 +1,70 @@
-"""Example: Map a Python function over items."""
+"""Example: Map a Python function over config files using the API helper."""
 
-import json
-import time
+from __future__ import annotations
+
+import sys
+from pathlib import Path
 
 from paracore import map_func
 
+EXAMPLES_ROOT = Path(__file__).resolve().parent
+if str(EXAMPLES_ROOT) not in sys.path:
+    sys.path.append(str(EXAMPLES_ROOT))
 
-def process_config_file(cfg_path: str) -> dict:
-    """Load config and process data."""
-    with open(cfg_path) as f:
-        cfg = json.load(f)
+from process_data import process_config  # noqa: E402  (added after sys.path tweak)
 
-    # Simulate some processing
-    time.sleep(0.1)
-
-    # Transform the data
-    result_value = cfg.get("value", 0) * 2.5
-
-    return {
-        "id": cfg["id"],
-        "result": result_value,
-        "input_file": cfg_path,
-        "status": "processed",
-    }
+OUTPUT_ROOT = EXAMPLES_ROOT / "results" / "map_func"
 
 
-# List of config files to process
-cfgs = [f"inputs/config_{i:04d}.json" for i in range(50)]  # Reduced for testing
+def execute_config(cfg_path: str) -> dict:
+    """Worker entrypoint invoked on the cluster."""
+    cfg_file = Path(cfg_path)
+    output_file = OUTPUT_ROOT / f"{cfg_file.stem}_map.json"
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    return process_config(cfg_path, output_file.as_posix(), mode="quick")
 
-# Submit function mapped over configs
-jobs = map_func(
-    fn=process_config_file,
-    items=cfgs,
-    partition="compute",
-    cpus_per_task=4,
-    mem_gb=16,
-    time_min=60,
-    job_name="data-transform",
-    retries=1,
-)
 
-print(f"Submitted {len(jobs)} processing jobs")
+def main() -> None:
+    input_dir = EXAMPLES_ROOT / "inputs"
+    if not input_dir.exists():
+        raise SystemExit(
+            "Config directory missing. Run `python examples/generate_test_data.py` first."
+        )
 
-# Collect results
-results = []
-for job in jobs:
-    try:
-        result = job.result()
-        results.append(result)
-    except Exception as e:
-        print(f"Job {job.job_id} failed: {e}")
+    configs = [str(path) for path in sorted(input_dir.glob("config_*.json"))[:20]]
 
-# Process results
-total_value = sum(r["result"] for r in results)
-print(f"Total processed value across {len(results)} configs: {total_value:,.2f}")
+    jobs = map_func(
+        fn=execute_config,
+        items=configs,
+        partition="compute",
+        cpus_per_task=2,
+        mem_gb=8,
+        time_min=30,
+        job_name="map-func-example",
+        retries=1,
+    )
+
+    print(f"Submitted {len(jobs)} processing jobs")
+
+    total_scaled = 0.0
+    completed = 0
+    for job in jobs:
+        try:
+            report = job.result()
+        except Exception as exc:  # noqa: BLE001 - surface worker failure
+            print(f"Job {job.job_id} failed: {exc}")
+            continue
+
+        completed += 1
+        scaled = report.get("scaled_metric")
+        if scaled is not None:
+            total_scaled += scaled
+
+    if completed:
+        print(
+            f"Average scaled metric: {total_scaled / completed:.3f} across {completed} completed jobs"
+        )
+
+
+if __name__ == "__main__":
+    main()

@@ -3,9 +3,11 @@
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import List, Optional
 
 from paracore import autotune_from_pilot, map_cmds, run_cmd
+from paracore.status import get_job_status
 
 
 def parse_env_vars(env_list: Optional[List[str]]) -> dict:
@@ -163,11 +165,60 @@ def cmd_autotune(args):
         print(f"export PARACORE_PARALLEL={suggestions['array_parallelism']}")
 
 
+def _format_sacct_info(info: dict[str, str]) -> str:
+    """Render a compact sacct summary string."""
+    if not info:
+        return "(no sacct data)"
+
+    preferred_keys = [
+        "State",
+        "Elapsed",
+        "ExitCode",
+        "NodeList",
+        "Submit",
+        "Start",
+        "End",
+    ]
+
+    pairs = [f"{key}={info[key]}" for key in preferred_keys if key in info and info[key]]
+    if not pairs:
+        # Fall back to a best-effort dump of the first few items
+        pairs = [f"{k}={v}" for k, v in list(info.items())[:4]]
+    return ", ".join(pairs)
+
+
 def cmd_status(args):
-    """Check status of jobs (placeholder)."""
-    print("Status command not yet implemented")
-    print("Use 'squeue' or 'sacct' directly for now")
-    sys.exit(0)
+    """Check the status of one or more submitted jobs."""
+    if not args.job_ids:
+        print("Provide at least one job id (e.g., 'paracore status 12345_0')", file=sys.stderr)
+        sys.exit(1)
+
+    log_dir = Path(args.log_dir).expanduser()
+    refresh = bool(getattr(args, "refresh", False))
+    exit_code = 0
+
+    for job_id in args.job_ids:
+        try:
+            status = get_job_status(job_id, log_dir=log_dir, refresh=refresh)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            print(f"{job_id}: unable to load status ({exc})", file=sys.stderr)
+            exit_code = 1
+            continue
+
+        print(f"{status.job_id}: {status.state}")
+
+        sacct_summary = _format_sacct_info(status.info)
+        print(f"  sacct: {sacct_summary}")
+
+        if status.stdout_path:
+            print(f"  stdout: {status.stdout_path}")
+        if status.stderr_path:
+            print(f"  stderr: {status.stderr_path}")
+        if status.note:
+            print(f"  note: {status.note}")
+
+    if exit_code:
+        sys.exit(exit_code)
 
 
 def main():
@@ -278,8 +329,18 @@ Examples:
     tune_parser.set_defaults(func=cmd_autotune)
 
     # Status command
-    status_parser = subparsers.add_parser("status", help="Check job status (placeholder)")
+    status_parser = subparsers.add_parser("status", help="Inspect job status")
     status_parser.add_argument("job_ids", nargs="*", help="Job IDs to check")
+    status_parser.add_argument(
+        "--log-dir",
+        default="submitit_logs",
+        help="Submitit log directory (defaults to ./submitit_logs)",
+    )
+    status_parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Force sacct refresh instead of using cached info",
+    )
     status_parser.set_defaults(func=cmd_status)
 
     # Parse arguments

@@ -196,11 +196,14 @@ Command exited with non-zero status 0
     Maximum resident set size (kbytes): 2048000
     """
 
-    mock_run.return_value = Mock(
-        returncode=0,
-        stdout="command output",
-        stderr=time_output,
-    )
+    def run_side_effect(*args, **kwargs):
+        err_stream = kwargs.get("stderr")
+        if err_stream is not None:
+            err_stream.write(time_output)
+            err_stream.flush()
+        return Mock(returncode=0)
+
+    mock_run.side_effect = run_side_effect
 
     # Submit with measurement
     backend = SubmititBackend(mock_config)
@@ -219,4 +222,3 @@ Command exited with non-zero status 0
     metrics = result["_paracore_metrics"]
     assert metrics["max_rss_mb"] == 2000  # 2048000 KB / 1024
     assert "duration_s" in metrics
-    assert result["output"] == "command output"

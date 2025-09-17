@@ -86,10 +86,15 @@ class Config:
             cluster = self.get_active_cluster()
 
         clusters = self._config.get("clusters", {})
-        if cluster not in clusters:
-            raise ValueError(f"Unknown cluster: {cluster}")
+        default_cluster = clusters.get("default")
 
-        return clusters[cluster]
+        if cluster in clusters:
+            cluster_config = clusters[cluster]
+            if cluster != "default" and default_cluster:
+                return self._merge_configs(default_cluster, cluster_config)
+            return cluster_config
+
+        raise ValueError(f"Unknown cluster: {cluster}")
 
     def resolve(self, cluster: Optional[str] = None, **overrides) -> Dict[str, Any]:
         """Resolve final configuration with overrides."""
@@ -132,7 +137,10 @@ class Config:
         # Format with available context
         try:
             cluster = context.get("cluster", self.get_active_cluster())
-            cluster_config = self.get_cluster_config(cluster)
+            try:
+                cluster_config = self.get_cluster_config(cluster)
+            except ValueError:
+                cluster_config = self.get_cluster_config()
 
             format_context = {
                 "project": context.get("project", "paracore"),

@@ -118,7 +118,8 @@ def test_job_name_formatting():
     long_name = "a" * 100
     name = config.format_job_name(long_name)
     assert len(name) <= 80
-    assert name.endswith("-")  # hash suffix
+    suffix = name.rsplit("-", 1)[-1]
+    assert len(suffix) == 6  # hash suffix applied for uniqueness
 
 
 def test_unknown_cluster():

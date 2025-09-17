@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 import time
 from typing import Any, Callable, List, Literal, Mapping, Optional
 
@@ -177,15 +178,17 @@ class SubmititBackend:
         env_wrapper = self._prepare_env_wrapper(env_setup, env, env_merge)
 
         def run_command():
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"Command failed: {result.stderr}")
-            return result.stdout
+            try:
+                subprocess.run(
+                    cmd,
+                    shell=True,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(
+                    f"Command failed with exit code {exc.returncode}. "
+                    "Check Slurm stdout/stderr logs for details."
+                ) from exc
 
         wrapped_fn = env_wrapper(run_command)
 
@@ -249,45 +252,58 @@ class SubmititBackend:
                 if measure_resources:
                     # Use /usr/bin/time to measure resources
                     wrapped_cmd = f"/usr/bin/time -v {cmd}"
-                    result = subprocess.run(
-                        wrapped_cmd,
-                        shell=True,
-                        capture_output=True,
-                        text=True,
-                    )
+                    with tempfile.NamedTemporaryFile(delete=False) as stderr_file:
+                        stderr_path = stderr_file.name
 
-                    # Parse time output
-                    max_rss_mb = 0
-                    for line in result.stderr.split("\n"):
-                        if "Maximum resident set size" in line:
-                            try:
-                                max_rss_kb = int(line.split()[-1])
-                                max_rss_mb = max_rss_kb / 1024
-                            except (ValueError, IndexError):
-                                pass
+                    try:
+                        with open(stderr_path, "w") as err_stream:
+                            subprocess.run(
+                                wrapped_cmd,
+                                shell=True,
+                                check=True,
+                                stderr=err_stream,
+                            )
+                    except subprocess.CalledProcessError as exc:
+                        raise RuntimeError(
+                            f"Command failed with exit code {exc.returncode}. "
+                            "Check Slurm stdout/stderr logs for details."
+                        ) from exc
+
+                    max_rss_mb = 0.0
+                    with open(stderr_path, "r") as err_stream:
+                        for line in err_stream:
+                            if "Maximum resident set size" in line:
+                                try:
+                                    max_rss_kb = int(line.split()[-1])
+                                    max_rss_mb = max_rss_kb / 1024
+                                except (ValueError, IndexError):
+                                    continue
+
+                    try:
+                        os.remove(stderr_path)
+                    except OSError:
+                        pass
 
                     duration_s = time.time() - start_time
-
-                    if result.returncode != 0:
-                        raise RuntimeError(f"Command failed: {result.stderr}")
 
                     return {
                         "_paracore_metrics": {
                             "duration_s": duration_s,
                             "max_rss_mb": max_rss_mb,
-                        },
-                        "output": result.stdout,
+                        }
                     }
-                else:
-                    result = subprocess.run(
+
+                try:
+                    subprocess.run(
                         cmd,
                         shell=True,
-                        capture_output=True,
-                        text=True,
+                        check=True,
                     )
-                    if result.returncode != 0:
-                        raise RuntimeError(f"Command failed: {result.stderr}")
-                    return result.stdout
+                except subprocess.CalledProcessError as exc:
+                    raise RuntimeError(
+                        f"Command failed with exit code {exc.returncode}. "
+                        "Check Slurm stdout/stderr logs for details."
+                    ) from exc
 
             return env_wrapper(run_command)
 

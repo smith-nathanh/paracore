@@ -48,7 +48,7 @@ paracore autotune commands.txt -o resources.json --export-shell
 - **`run`** - Submit a single job
 - **`batch`** - Submit array job from file or stdin
 - **`autotune`** - Run pilot jobs to determine optimal resources
-- **`status`** - Check job status (placeholder)
+- **`status`** - Inspect job state and log locations
 
 ## Examples
 

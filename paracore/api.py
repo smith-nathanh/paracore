@@ -57,7 +57,9 @@ def run_cmd(
                 qos=qos,
                 extra=extra,
             )
-        except (subprocess.SubprocessError, RuntimeError, OSError, ValueError):
+        except Exception as exc:
+            if isinstance(exc, KeyboardInterrupt):
+                raise
             # Only retry on known transient errors
             if attempt >= retries:
                 raise
@@ -112,7 +114,9 @@ def map_cmds(
                 qos=qos,
                 extra=extra,
             )
-        except (subprocess.SubprocessError, RuntimeError, OSError, ValueError):
+        except Exception as exc:
+            if isinstance(exc, KeyboardInterrupt):
+                raise
             # Only retry on known transient errors
             if attempt >= retries:
                 raise
@@ -169,7 +173,9 @@ def map_func(
                 qos=qos,
                 extra=extra,
             )
-        except (subprocess.SubprocessError, RuntimeError, OSError, ValueError):
+        except Exception as exc:
+            if isinstance(exc, KeyboardInterrupt):
+                raise
             # Only retry on known transient errors
             if attempt >= retries:
                 raise
